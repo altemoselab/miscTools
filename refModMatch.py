@@ -9,10 +9,6 @@ import shlex
 import tqdm
 from array import array
 
-# remove modifications that are not reference matched
-# requires MD tag
-# all base modifications must be in reference to the forward strand (0)
-
 
 bam = pysam.AlignmentFile(sys.argv[1],'rb')
 header = bam.header.to_dict()
@@ -20,193 +16,154 @@ header = bam.header.to_dict()
 output_bam_name = sys.argv[2]
 output_bam = pysam.AlignmentFile(output_bam_name,"wb", header = header)
 
+def getMatchedModBases(read):
+
+	reverseComplement = {'C':'G',
+						 'A':'T',
+						 'G':'C',
+						 'T':'A'}
+
+	forward_mods = read.modified_bases_forward
+	# get modified bases
+
+	aligned_pairs = np.array(read.get_aligned_pairs(with_seq=True,matches_only=False))
+	# get the sequence to find mismatches, and we want non-matches (indels) as well 
+	aligned_pairs = aligned_pairs[aligned_pairs[:,0] != None ,:]
+	none_idx = aligned_pairs[:,2] == None 
+	# index of Nones (indel)
+
+	aligned_pairs[:,2][none_idx] = "n" 
+	# replace None with n for string operations 
+
+	seq_len = read.infer_read_length()
+
+	# print(aligned_pairs[:,0])
+
+	if read.is_reverse:
+		none_idx = aligned_pairs[:,0] == None
+		aligned_pairs[:,0][~none_idx] = np.abs(aligned_pairs[:,0][~none_idx] - seq_len) - 1
 
 
-for read in tqdm.tqdm(bam.fetch()):
+	aligned_pairs = aligned_pairs[np.argsort(aligned_pairs[:,0])]
+
+	aligned_pairs_forward = aligned_pairs[:,0].T
+
+	orientation = "+" 
+	
+	if read.is_reverse:
+		orientation = "-"
+
+	modification_val_dict = {}	
+	
+	for mod in forward_mods:
+
+
+		mod_forward_positions = np.array(forward_mods[mod])[:,0].T.astype(int)
+
+		values, mod_idx, aligned_pairs_idx = np.intersect1d(mod_forward_positions, 
+															aligned_pairs_forward, 
+															assume_unique=True, 
+															return_indices = True)
+		
+		correctBase = mod[0]
+		if read.is_reverse:
+			correctBase = reverseComplement[mod[0]]
+
+		# Aligned pairs idx represents all the values encoded in the MM Tag
+		# we want the index of aligned_pairs_idx where the correct base is encoded
+
+		correct_idx = np.argwhere(aligned_pairs[:,2][aligned_pairs_idx] == correctBase).T[0]
+
+		modification_val_dict[mod[0] + "+" + mod[-1]] = correct_idx
+		# correct_idx will let us directly mask the delta-encoded MM tag
+		# and quickly modify the positions
+
+	return modification_val_dict
+
+def convertMM(encoding,correct_idx):
+
+	 
+	if len(correct_idx) > 0:
+
+		cumsum_correct = np.cumsum(encoding + 1)[correct_idx]
+
+		new_encoding = np.insert(np.diff(cumsum_correct),0,cumsum_correct[0]) - 1
+		return new_encoding
+	
+	else:
+		
+		return None
+	
+
+
+
+
+def modifyMMAndMLTags(read, mod_idx_dict):
+
+	original_mm = read.get_tag('MM').split(';') [:-1]
+	# gets us the actual array we will need to index, MM
+	
+	original_ml = np.array(read.get_tag('ML'))
+	# get us the actual array of probabilities we need to index, ML
+		
+	new_mm_list = []
+
+	ml_start_counter = 0
+	new_ml = []
+	
+	for mod_str in original_mm:
+		
+		mod_arr = mod_str.split(',')
+		if len(mod_arr) > 1:
+			
+
+			correct_idx = mod_idx_dict[mod_arr[0]]
+			
+			encoding = np.array(mod_arr[1:]).astype(int)
+
+			new_ml.append(original_ml[correct_idx + ml_start_counter])
+
+			ml_start_counter += len(encoding)
+
+			new_encoding = convertMM(encoding, correct_idx)
+
+			if new_encoding is not None:
+
+				new_mm_list.append(','.join([mod_arr[0]] + list(new_encoding.astype(str))))
+			else:
+				new_mm_list.append(mod_arr[0])
+		else:
+			new_mm_list.append(mod_arr[0])
+
+
+
+	new_mm = ';'.join(new_mm_list) + ';'
+	if len(new_ml) == 0:
+		new_ml = None
+	
+	else:
+		new_ml = np.concatenate(new_ml)	 
+	
+	return new_mm, new_ml
+
+for read in tqdm.tqdm(bam):
 
 	if read.has_tag('MM'):
 
-		aligned_pairs = np.array(read.get_aligned_pairs(with_seq=True,matches_only=False))
+		mod_idx_dict = getMatchedModBases(read)
 
-		# find all indel/padding positions
-		none_idx = aligned_pairs[:,2] == None
-
-		# replace those with lowercase string for vectorized operation
-		aligned_pairs[:,2][none_idx] = "n"
-		# sub idx now reperesents all bad positions based on lowercase search, as per pysam spec
-		sub_idx = np.char.islower(aligned_pairs[:,2].astype(str)) 
+		new_mm, new_ml = modifyMMAndMLTags(read, mod_idx_dict)
 		
-		bad_read_positions = aligned_pairs[:,0][sub_idx].astype(int)
+		if new_ml is not None:
+			read.set_tag('ML' ,array('B', new_ml))
 
-		seq_len = read.infer_read_length()
+		read.set_tag('MM', new_mm, "Z")
+		# print('---')
 
-		if read.is_reverse:
-			bad_read_positions = np.sort(np.abs(bad_read_positions - seq_len) - 1)
 
-		# bad read positions is based on query alignment 
-		# positions so these would need to be adjusted for alignment orientation
-
-		# can use pysam's read_modified_bases forward to get the forward 
-		# positions for every modification
-		# filter those and recieve the index's that pass
-		# to then grab the positions of 
-
-		forward_mods = read.modified_bases_forward # gets the forward coord of the modifications
-		# print(read.get_tag('MM'))
-		original_mm = read.get_tag('MM')   # gets us the actual array we will need to index, MM
-		original_ml = read.get_tag('ML')  # get us the actual array of probabilities we need to index, ML
-		
-		original_mm = original_mm.split(';')[:-1]
-
-		new_ml = []
-		ml_counter = 0
-		all_mm = []
-		mod_type_tracker = []
-		for mm in original_mm:
-			
-			split_mm = mm.split(',')
-			base_mod = split_mm[0]
-			forward_mod_positions = np.array(forward_mods.get((base_mod[0],0,base_mod[-1])))
-			mm_positions = np.array(split_mm[1:]).astype(int)
-			mod_type_tracker.append(base_mod)
-
-			if forward_mod_positions.size > 1 and len(mm_positions) > 0:
-
-				forward_mod_positions = forward_mod_positions[:,0]
-
-				forward_mod_to_remove = np.isin(forward_mod_positions, bad_read_positions) # removing True, keeping False
-				if np.sum(forward_mod_to_remove) > 0:
-
-					forward_mod_to_remove_diff_encoding = np.diff(np.hstack([[False],forward_mod_to_remove,[False]]).astype(int)) # value of 1 indicates beginning of stretch
-																					# value of -1 indicates end of stretch (remove becomes False)
-																					# value of 0 means continuation
-			
-					# this is in "python index" so just use [start:stop], stop is also 
-					# the value that you add the new delta too
-					idx_remove_start = np.where(forward_mod_to_remove_diff_encoding == 1)[0]
-					idx_remove_stop = np.where(forward_mod_to_remove_diff_encoding == -1)[0]
-
-					if idx_remove_stop[-1] == len(forward_mod_to_remove):
-						idx_remove_start = idx_remove_start[:-1]
-						idx_remove_stop = idx_remove_stop[:-1]
-
-
-					tmp_mm = mm_positions.copy()
-
-					ranges_idx = range(len(idx_remove_start))
-					for i in ranges_idx:
-
-						start, stop = int(idx_remove_start[i]), int(idx_remove_stop[i])
-						new_val = tmp_mm[stop] + np.sum(mm_positions[start:stop] + 1)
-
-						tmp_mm[stop] = mm_positions[stop] + np.sum(mm_positions[start:stop] + 1)
-					new_mm = tmp_mm[forward_mod_to_remove==False]
-					if len(new_mm) == 0:
-						output_bam.write(read)
-						continue
-					all_mm.append(new_mm)
-					
-
-					## new_MM is good and represents the new mms we want to use
-					# now we need to index the ML tag using the forward_mod_to_remove 
-					# and keep count of how many positions we consume 
-					# to then filter for the next modification type
-
-					tmp_ml = np.array(original_ml[ml_counter:ml_counter + len(forward_mod_to_remove)])
-					new_ml.append(tmp_ml[forward_mod_to_remove==False])
-					
-					ml_counter =+ len(forward_mod_to_remove)
-
-
-		if len(new_ml) < 2:
-			output_bam.write(read)
-			continue
-		new_ml = np.concatenate(new_ml)
-
-		output_ml = list(new_ml.astype(int))
-		read.set_tag('ML' ,array('B', output_ml))
-		
-		output_mm_list = []
-		
-		for mod_type, mod_mm_positions in zip(mod_type_tracker, all_mm):
-			output_mm_list.append(mod_type + "," + ','.join(mod_mm_positions.astype(str)))
-
-
-		output_mm_string = ';'.join(output_mm_list) + ";"
-
-		read.set_tag('MM', output_mm_string, "Z")
-
-
-					## new_MM is good and represents the new mms we want to use
-					# now we need to index the ML tag using the forward_mod_to_remove 
-					# and keep count of how many positions we consume 
-					# to then filter for the next modification type
-
-
-
-
-
-				# to change the MM positiong it is sum(lost values + 1) of positions because of 0 based delta calculation
-
-
-
-
-
-
-
-				
-
-
-
-
-
-
-
-
-		# break
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-		# need to map the MM format onto reference / genomic coordinates
-		# what would be fastest is to get all lowercase values + None values 
-		# and then remove MM coords corresponding to those values
-
-		
-
-
-
-
-
-
-		
-
-
-
-
-
-
-
-
-
-
-
-	
 	output_bam.write(read)
 
+		# tag_idx = getIndexOfTagValsToRemove(read, bad_read_positions)
 
-
-
-
-
+		# For generating actual MM array we can try fast mm manipulation or if doesen't work 
+		# we can do quick sequence manipulation from forward_sequence
