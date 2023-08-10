@@ -4,8 +4,7 @@ Miscellaneous scripts for working with DiMeLo-seq + other sequencing data types.
 ### addBarcodeToRG.py 
 This is a script that will take the output of the guppy barcoder and add the barcode to the read group in a bam file.
 Usage: 
-```addBarcodeToRG.py <bam> <guppy_barcoder_summary_tsv> 
-        <comma_seperated_list_of_barcodes_to_keep, including leading 0s (example 01,02,03,08,11,12) > ```
+```addBarcodeToRG.py <bam> <guppy_barcoder_summary_tsv> <comma_seperated_list_of_barcodes_to_keep, including leading 0s (example 01,02,03,08,11,12) > ```
 
 ### refModMatch.py 
 This is a script which will only keep bases in the MM tag if they are a match to the reference genome.
