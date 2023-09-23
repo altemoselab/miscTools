@@ -43,17 +43,17 @@ def getDefinedMod(mod_tags,read):
 			mod ="a"
 		else:
 			print('''Modified Base not supported. \n Supported base-mods: Edu,BrdU,5mC,6mA. \n 
-				Proper usage: python3 filterDNAscentModTags.py 
+				Proper usage: python3 filterBaMod.py 
 				bam output_name modification probability_cutoff( int 0-255 )''' )
 
 
 
-		if read.is_reverse:
-			direction = '-'
-		else:
-			direction = "+"
+		# if read.is_reverse:
+		# 	direction = '-'
+		# else:
+		# 	direction = "+"
 
-		defined_mod = base + direction + mod
+		defined_mod = base + "+" + mod
 		defined_mods.append(defined_mod)
 
 	return defined_mods
@@ -61,14 +61,12 @@ def getDefinedMod(mod_tags,read):
 
 
 for read in tqdm(infile.fetch()):
-	
 	if read.has_tag('MM'):
 		
 		mods = read.get_tag("MM", with_value_type=True)
 		mods_prob = read.get_tag("ML", with_value_type=True)
 
 		defined_mods = getDefinedMod(mod_tags,read)
-
 
 
 		ml = mods_prob[0]
@@ -92,13 +90,11 @@ for read in tqdm(infile.fetch()):
 			mm_mod_positions = np.array(mm_specific_mod_arr[1:]).astype(int)
 
 
-
 			number_mods = len(mm_mod_positions)
 
 
 			#(start, stop) 0 - based, start-included, end excluded
 			mod_specific_ml_coords = (region_specific_start_index,region_specific_start_index + number_mods)
-
 			if mm_specification in defined_mods:
 
 			# 	# cumulative_sum(MM_Tag + 1 ) represents the number of preceding Ts
