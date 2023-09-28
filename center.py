@@ -59,10 +59,14 @@ def outputCenter(bam,bed,min_ml_score,base):
 				else:
 					ap_ref_match = ap[:,ap[2]=="A"]
 
+
+
 			elif base == "CG": # for the +2 positions should be merged
 				
 				# identify CGs in ap[2]
 				Cmatch = np.argwhere(ap[2]=="C").T[0]
+				if len(Cmatch) == 0:
+					continue
 				if Cmatch[-1] >= len(ap[2]) - 2:
 					Cmatch = Cmatch[:-1]
 			
@@ -84,12 +88,15 @@ def outputCenter(bam,bed,min_ml_score,base):
 				exit()
 
 
+
 			ref_align_matches = ap_ref_match[1].astype(int)
 			forward_align_matches = ap_ref_match[0].astype(int)
 			
 			within_window_ref_align_matches = ref_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)]
 			within_window_ref_align_matches_list = list(within_window_ref_align_matches)
 
+			if len(within_window_ref_align_matches) == 0:
+				continue
 
 			# only forward positions within genomic window
 			forward_align_matches = forward_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)] 
