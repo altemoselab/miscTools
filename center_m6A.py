@@ -2,15 +2,9 @@
 import pysam 
 import sys
 import numpy as np 
-import gzip
-import subprocess
-import shlex
 import argparse
 from tqdm import tqdm 
 from pybedtools import BedTool
-import regex as re
-import pyfaidx
-from Bio.Seq import Seq
 
 
 def inputArgs():
