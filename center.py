@@ -1,26 +1,9 @@
-# Centering tool for single molecule reads overlapping bed file 
-
-# Input modBam, bed with genomic coordinates
-# By Default it searches for match to reference, can be turned off with -n (speed up)
-# Outputs: Centered molecule bed12 (-), centered to beginning of interval
-# 		option: genome_tabular center output Default and standard)
-				# chr		start	stop 	strand	centering_pos	A_acount mA_count 
-
-#output will be printed to stdout
-#output is not adjusted to orientat
-
 import pysam 
 import sys
 import numpy as np 
-import gzip
-import subprocess
-import shlex
 import argparse
-import tqdm
+from tqdm import tqdm 
 from pybedtools import BedTool
-import regex as re
-import pyfaidx
-from Bio.Seq import Seq
 
 
 def inputArgs():
@@ -35,206 +18,138 @@ def inputArgs():
 
 	parser.add_argument('--bed',
 		type=str,
-		help = 'output bam name')
-
-	parser.add_argument('-b','--bases',
-		type=str,
-		default='A',
-		help = 'modification base, options = [ A,CG ]. \n Can be multiple but must be seperated by comma: A,CG [NOT SUPPORTED YET] ')
+		help = 'bed intervals to calculate refMatched bedGraph, make sure elements do not overlap')
 
 	parser.add_argument('-m','--min_ml_score',
 		type=int,
 		default=125,
 		help='min-ml-score for modification')
-	
-	parser.add_argument('-g','--genome',
+
+	parser.add_argument('-b','--base',
 		type=str,
-		help='reference genome, with index, not gzipped')
-
-	parser.add_argument('-d','--distance',
-		type=int,
-		default=10000,
-		help='distance away from center to look at mods, sequences are dervied from read alignment')
-
-
-	parser.add_argument('--no_match', action='store_true')
+		default="A",
+		help='base of interest to quantify modification, A or CG')
 	args = parser.parse_args()
 
-	return args.bam, args.bed, args.bases, args.min_ml_score, args.no_match, args.distance, args.genome
+	return args.bam, args.bed, args.min_ml_score, args.base
 
 
 
-def outputCenter(bam,bed,ref,bases,min_ml_score,distance):
+def outputCenter(bam,bed,min_ml_score,base):
 
+	output_dict = {}#chrom and then in each chrom it is 
+	for interval in tqdm(bed,mininterval=0.5):
 
+		output_dict[str(interval[0])] = {}
 
-	if ',' in bases:
-		split_bases = bases.split(',')
-		base='list'
-	else:
-		if bases == "A":
-			mod_code = ('A', 0, 'a')
-			base = bases
-			revbase='T'
-			bytebase = bytes(base, encoding='utf-8')
-			byterevbase = bytes(revbase, encoding='utf-8')
-		elif bases == 'CG':
-			mod_code = ('C', 0, 'm')
-			base = 'CG'
-			bytebaseC = bytes('C', encoding='utf-8')
-			bytebaseG = bytes('G', encoding='utf-8')
-		else:
-			sys.stderr.write('invalid base {}, options are A, CpG, or A,CpG'.format(bases))
-			exit()
-	
+		# for pos in range(int(interval[1]),int(interval[2])+1):
+		# 	output_dict[str(interval[0])][pos] = [0,0] #overlap,modification 
 
+		for read in bam.fetch(str(interval[0]),int(interval[1]),int(interval[2])):
 
-	for interval in tqdm.tqdm(bed,mininterval=0.5):
-		if len(interval) >= 6:
-			if "+" == str(interval[5]) or "-" == str(interval[5]):
-				strand = interval[-1]
-			elif "+" == str(interval[3]) or "-" == str(interval[3]):
-				strand = interval[3]
-			else:
-				strand = "."
-		elif len(interval) == 4:
-
-			if "+" == str(interval[3]) or "-" == str(interval[3]):
-				strand = interval[3]
-			else:
-				strand = "."
-		else:
-			strand = "."
-
-		ref_start = int(interval[1]) - distance
-		ref_end = int(interval[1]) + distance
-		read_length = ref_end - ref_start
-
-
-		seq  = ref[str(interval[0])][int(interval[1]) - distance:int(interval[1]) + distance]
-
-
-		base_idx = [m.start(0) for m in re.finditer(base, seq)]
-		if base == "A":
-			rev_comp_base_idx = [m.start(0) for m in re.finditer(revbase, seq)]
-		elif base == "CG":
-			rev_comp_base_idx = [m+1 for m in base_idx] # count Gs
-		
-		sorted_pos = np.sort(np.array(base_idx + rev_comp_base_idx)) 
-
-		base_count = np.zeros(shape=len(sorted_pos))
-		modification_count = np.zeros(shape=len(sorted_pos))
-		# the reverse complement also
-		 # has potential mod sites so we must search for them on the rev_seq sequence 
-
-		# base_idx will be the positions in which we can have a modification that we are tracking
-		# we will have a counter based on an index linked to base_idx
-
-
-
-		for read in bam.fetch(str(interval[0]),ref_start,ref_end):
-
-			ap = np.array(read.get_aligned_pairs(matches_only=True,with_seq=False)).T.astype(int)
+			ap = np.array(read.get_aligned_pairs(matches_only=True,with_seq=True)).T.astype(str)
 			# if read.is_reverse:
 			# 	for_seq = np.frombuffer(bytes(str(Seq(read.get_forward_sequence()).reverse_complement()), "utf-8"), dtype="S1")
 			# else:
-			for_seq = np.frombuffer(bytes(read.get_forward_sequence(), "utf-8"), dtype="S1")
-
-			# reverse read can contribute at T 
-			# forwrad read can contribute at A
-
-			if base == 'A':
-				# if read.is_reverse:
-				# 	for_seq_match_idx = np.argwhere(for_seq==bytebase).T[0]
-				# else:
-				for_seq_match_idx = np.argwhere(for_seq==bytebase).T[0]
 			
-			elif base == 'CG':
-			# if base is CG , C is what we count for sense strand
-			# G is option for antisense strand
-					C_match = np.argwhere(for_seq==bytebaseC).T[0]
-					if C_match[-1] == len(for_seq)-1:
-						C_match = C_match[:-1]
-					CG_idx = np.argwhere(for_seq[C_match+1]==bytebaseG).T[0]
-					G_match = C_match[CG_idx] + 1
-					C_match = C_match[CG_idx]
-					if read.is_reverse:
-						for_seq_match_idx = G_match
-					else:
-						for_seq_match_idx = C_match
-					# print(C_match,G_match)
 
-			# NEED TO ADJUST COORDS FOR REVERSE MAPPING READS BEFORE ACCESSING ALIGNED PAIRS
+			if base == "A":
+				if read.is_reverse:
+					ap_ref_match = ap[:,ap[2]=="T"]
+				else:
+					ap_ref_match = ap[:,ap[2]=="A"]
 
-			correct_coord = lambda x: np.abs(x - read.infer_query_length()) + 1
-
-			match_ref_coord = ap[1][np.isin(ap[0],correct_coord(for_seq_match_idx))]
-			match_ref_coord = match_ref_coord[(match_ref_coord >= ref_start) & (match_ref_coord < ref_end)] - ref_start
-			# print(match_ref_coord)
-
-			#### UP TOTAL BASE COUNT ###
-			# print(match_ref_coord)
-			base_count[np.isin(sorted_pos,match_ref_coord)] += 1
-			###
-
-			# need map positions to reference that will count 
-			# fastest way to do this is to identify all positions in read that are A/T or CG
-			# then use aligned pairs to pull out ref coords that match 
-			# adjust by ( ref_coord >= ref_start and ref_coord < ref_stop- ref_start ) - ref_start
-			# and this gives you relative postision that pass and then you can populate array 
-
-			# we have the reference positions in seq 
-			# we have the alignment information in ap
-			# we can now use these two to sieve modifications that much both
-
-
-			### modified bases
-			mod_bases_forward = np.array(read.modified_bases_forward[mod_code]).T
- 		
-			accepted_mods = mod_bases_forward[0][mod_bases_forward[1] >= min_ml_score]
-			# if read.is_reverse:
-			# print(for_seq[accepted_mods])
-				# 	# coords are 0 based, length is inherently 1-based, so we must add 1
-			# 	accepted_mods  = np.abs(accepted_mods - read.infer_query_length()) + 1
+			elif base == "CG": # for the +2 positions should be merged
 				
-
-			mod_match_ref_coord = ap[1][np.isin(ap[0],correct_coord(accepted_mods[np.isin(accepted_mods,for_seq_match_idx)]))]
-			mod_match_ref_coord = mod_match_ref_coord[(mod_match_ref_coord >= ref_start) & (mod_match_ref_coord < ref_end)] - ref_start
-
-			### UP MODIFICATION COUNT
-			modification_count[np.isin(sorted_pos,mod_match_ref_coord)] += 1
-			###
-
-		# print(modification_count)
-		# print(base_count)
-		sorted_pos_idx = range(len(sorted_pos))
-		sorted_pos = (sorted_pos + ref_start) - distance
-		for i in sorted_pos_idx:
-			out_interval = [interval[0],
-							str(sorted_pos[i]),
-							str(sorted_pos[i] + 1),
-							strand,
-							str(interval[1]),
-							str(int(base_count[i])),
-							str(int(modification_count[i]))]
-			print('\t'.join(out_interval))
+				# identify CGs in ap[2]
+				Cmatch = np.argwhere(ap[2]=="C").T[0]
+				if Cmatch[-1] >= len(ap[2]) - 2:
+					Cmatch = Cmatch[:-1]
+			
 
 
+				# cant simply add to index because it does not account for gapped
+				# alignment between C and G 
+
+				Gmatch = np.argwhere((ap[2][Cmatch+1] == "G") & (ap[1][Cmatch+1].astype(int) == (ap[1][Cmatch].astype(int) + 1)))
+
+				CG_match = Cmatch[Gmatch]
+
+				if read.is_reverse:
+					ap_ref_match = ap[:,CG_match+1] # grab G in CG
+				else:
+					ap_ref_match = ap[:,CG_match]
+			else:
+				sys.stderr.write('Base not supported, only A or CG supported currently\n')
+				exit()
 
 
+			ref_align_matches = ap_ref_match[1].astype(int)
+			forward_align_matches = ap_ref_match[0].astype(int)
+			
+			within_window_ref_align_matches = ref_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)]
+			within_window_ref_align_matches_list = list(within_window_ref_align_matches)
 
+
+			# only forward positions within genomic window
+			forward_align_matches = forward_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)] 
+
+
+			for pos in within_window_ref_align_matches_list:
+
+				if base == "CG":
+					if read.is_reverse:
+						pos = pos - 1
+				
+				if pos not in output_dict[str(interval[0])]:
+				
+					output_dict[str(interval[0])][pos] = [0,0]
+				
+				output_dict[str(interval[0])][pos][0] += 1
+
+			
+			if base == "A":
+				mods = np.array(read.modified_bases_forward[('A',0,'a')]).T.astype(int)
+			elif base == "CG":
+				mods = np.array(read.modified_bases_forward[('C',0,'m')]).T.astype(int)
+			
+			valid_mods = mods[0][mods[1] >= min_ml_score]
+
+			# Convert coordinates if read is aligning to the reverse strand
+
+			if read.is_reverse:
+				valid_mods = np.abs(valid_mods - read.infer_query_length()) + 1
+
+			mod_counter_ref_matches = list(within_window_ref_align_matches[np.isin(forward_align_matches,valid_mods)])
+
+			for pos in mod_counter_ref_matches:
+
+				if base == "CG":
+					if read.is_reverse:
+						pos = pos - 1
+
+				output_dict[str(interval[0])][pos][1] += 1
+
+
+	size = len(base)
+	for c in output_dict:
+		for pos in output_dict[c]:
+			mod_count = output_dict[c][pos][1]
+			base_count = output_dict[c][pos][0]
+			if base_count == 0:
+				print(c,"\t",pos,"\t",pos+size,"\t",0,"\t",0,"\t",0)
+			else:
+				print(c,"\t",pos,"\t",pos+size,"\t",output_dict[c][pos][1]/output_dict[c][pos][0],"\t",output_dict[c][pos][1],"\t",output_dict[c][pos][0])
 
 
 def main():
 	
-	bam_file, bed_file, bases, min_ml_score,no_match,distance,genome = inputArgs()
+	bam_file, bed_file, min_ml_score,base = inputArgs()
 
 	bed = BedTool(bed_file)
 	bam = pysam.AlignmentFile(bam_file,'rb',check_sq=False) 
-	ref = pyfaidx.Fasta(genome, sequence_always_upper=True, as_raw=True)
 
-
-	outputCenter(bam,bed,ref,bases,min_ml_score,distance)
+	outputCenter(bam,bed,min_ml_score,base)
 
 
 
@@ -243,19 +158,26 @@ if __name__=="__main__":
 	main()
 
 
+########
+##
+# 01 23 45 
+# Forward:AT CG AT 
+# Forward, position would be 2
+#
+# Reverse: AT CG AT 
 
-		# if len(interval) >= 6:
-		# 	if "+" == str(interval[5]) or "-" == str(interval[5]):
-		# 		strand = interval[-1]
-		# 	elif "+" == str(interval[3]) or "-" == str(interval[3]):
-		# 		strand = interval[3]
-		# 	else:
-		# 		strand = "."
-		# elif len(interval) == 4:
 
-		# 	if "+" == str(interval[3]) or "-" == str(interval[3]):
-		# 		strand = interval[3]
-		# 	else:
-		# 		strand = "."
-		# else:
-		# 	strand = "."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
