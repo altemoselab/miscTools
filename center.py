@@ -42,10 +42,6 @@ def outputCenter(bam,bed,min_ml_score,base):
 
 		output_dict[str(interval[0])] = {}
 
-		# for pos in range(int(interval[1]),int(interval[2])+1):
-		# 	output_dict[str(interval[0])][pos] = [0,0] #overlap,modification 
-		print(interval)
-		counter = 0 
 		for read in bam.fetch(str(interval[0]),int(interval[1]),int(interval[2])):
 			
 			ap = np.array(read.get_aligned_pairs(matches_only=True,with_seq=True)).T.astype(str)
