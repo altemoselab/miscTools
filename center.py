@@ -44,9 +44,10 @@ def outputCenter(bam,bed,min_ml_score,base):
 
 		# for pos in range(int(interval[1]),int(interval[2])+1):
 		# 	output_dict[str(interval[0])][pos] = [0,0] #overlap,modification 
-
+		print(interval)
+		counter = 0 
 		for read in bam.fetch(str(interval[0]),int(interval[1]),int(interval[2])):
-
+			
 			ap = np.array(read.get_aligned_pairs(matches_only=True,with_seq=True)).T.astype(str)
 			# if read.is_reverse:
 			# 	for_seq = np.frombuffer(bytes(str(Seq(read.get_forward_sequence()).reverse_complement()), "utf-8"), dtype="S1")
@@ -101,7 +102,7 @@ def outputCenter(bam,bed,min_ml_score,base):
 			# only forward positions within genomic window
 			forward_align_matches = forward_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)] 
 
-
+			counter +=1 
 			for pos in within_window_ref_align_matches_list:
 
 				if base == "CG":
@@ -138,15 +139,15 @@ def outputCenter(bam,bed,min_ml_score,base):
 				output_dict[str(interval[0])][pos][1] += 1
 
 
-	size = len(base)
-	for c in output_dict:
-		for pos in output_dict[c]:
-			mod_count = output_dict[c][pos][1]
-			base_count = output_dict[c][pos][0]
-			if base_count == 0:
-				print(c,"\t",pos,"\t",pos+size,"\t",0,"\t",0,"\t",0)
-			else:
-				print(c,"\t",pos,"\t",pos+size,"\t",output_dict[c][pos][1]/output_dict[c][pos][0],"\t",output_dict[c][pos][1],"\t",output_dict[c][pos][0])
+		size = len(base)
+		for c in output_dict:
+			for pos in output_dict[c]:
+				mod_count = output_dict[c][pos][1]
+				base_count = output_dict[c][pos][0]
+				if base_count == 0:
+					print(c,"\t",pos,"\t",pos+size,"\t",0,"\t",0,"\t",0)
+				else:
+					print(c,"\t",pos,"\t",pos+size,"\t",output_dict[c][pos][1]/output_dict[c][pos][0],"\t",output_dict[c][pos][1],"\t",output_dict[c][pos][0])
 
 
 def main():
