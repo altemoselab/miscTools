@@ -98,7 +98,6 @@ def outputCenter(bam,bed,min_ml_score,base):
 			# only forward positions within genomic window
 			forward_align_matches = forward_align_matches[(ref_align_matches >= int(interval[1])) & (int(interval[2]) > ref_align_matches)] 
 
-			counter +=1 
 			for pos in within_window_ref_align_matches_list:
 
 				if base == "CG":
