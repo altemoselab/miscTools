@@ -24,7 +24,7 @@ pod5=$1 # dir of pod5 files
 --emit-moves \
 /oak/stanford/groups/altemose/dubocd/tools/dorado-0.3.4-linux-x64/dna_r10.4.1_e8.2_400bps_sup@v4.2.0 \
 $pod5 \
-> ${pod5::-4}bam
+> ${pod5}/dorado_out.bam 
 
 
 exit
