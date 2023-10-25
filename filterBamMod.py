@@ -85,8 +85,7 @@ for read in tqdm(infile.fetch(until_eof=True)):
 
 			mm_specific_mod_arr = mm_specific_mod.split(',')
 			
-			mm_specification = mm_specific_mod_arr[0]
-			
+			mm_specification = mm_specific_mod_arr[0][:3]
 			mm_mod_positions = np.array(mm_specific_mod_arr[1:]).astype(int)
 
 
@@ -95,8 +94,7 @@ for read in tqdm(infile.fetch(until_eof=True)):
 
 			#(start, stop) 0 - based, start-included, end excluded
 			mod_specific_ml_coords = (region_specific_start_index,region_specific_start_index + number_mods)
-			if mm_specification in defined_mods:
-
+			if mm_specification[:3] in defined_mods:
 			# 	# cumulative_sum(MM_Tag + 1 ) represents the number of preceding Ts
 			# 	# take the numpy difference there and then you get the number since 
 
@@ -138,7 +136,6 @@ for read in tqdm(infile.fetch(until_eof=True)):
 		# new_tags = [('MM', new_mods, "Z"), ('ML' ,list(np.concatenate(new_mods_prob)), 'C')]
 		else:	
 			output_ml = list(np.concatenate(new_mods_prob).astype(int))
-			# print(output_ml)
 			# exit()
 			read.set_tag('MM', new_mods_string, "Z")
 			read.set_tag('ML' ,array('B', output_ml))
