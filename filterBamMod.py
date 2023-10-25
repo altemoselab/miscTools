@@ -25,7 +25,7 @@ outfile = pysam.AlignmentFile(output_bam,
 								template = infile, 
 								threads = 1)
 
-def getDefinedMod(mod_tags,read):	
+def getDefinedMod(mod_tags,read, until_eof=True):	
 	
 	defined_mods = []
 	for mod_tag in mod_tags:	
