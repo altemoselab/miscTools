@@ -18,7 +18,7 @@ probability_cutoffs = [int(x) for x in sys.argv[4].split(',')]
 
 
 infile = pysam.AlignmentFile(input_bam, 'rb', 
-								threads = 1)
+								threads = 1, check_sq=False)
 
 outfile = pysam.AlignmentFile(output_bam, 
 								mode = 'wb',
