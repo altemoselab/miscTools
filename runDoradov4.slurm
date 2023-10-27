@@ -3,7 +3,7 @@
 #SBATCH --partition=owners,gpu
 #SBATCH --gpus 1
 #SBATCH --time=16:00:00
-#SBATCH --mem=48G
+#SBATCH --mem=32G
 #SBATCH -C GPU_GEN:VLT
 #SBATCH -c 8
 #SBATCH --chdir=/scratch/users/dubocd/altemose/slurm
