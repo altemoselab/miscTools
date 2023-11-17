@@ -41,7 +41,10 @@ def getMatchedModBases(read):
 
 	if read.is_reverse:
 		none_idx = aligned_pairs[:,0] == None
-		aligned_pairs[:,0][~none_idx] = np.abs(aligned_pairs[:,0][~none_idx] - seq_len) - 1
+		try:
+			aligned_pairs[:,0][~none_idx] = np.abs(aligned_pairs[:,0][~none_idx] - seq_len) - 1
+		except:
+			return None
 
 
 	aligned_pairs = aligned_pairs[np.argsort(aligned_pairs[:,0])]
@@ -116,8 +119,8 @@ def modifyMMAndMLTags(read, mod_idx_dict):
 		mod_arr = mod_str.split(',')
 		if len(mod_arr) > 1:
 			
-
-			correct_idx = mod_idx_dict[mod_arr[0]]
+			
+			correct_idx = mod_idx_dict[mod_arr[0][:3]]
 			
 			encoding = np.array(mod_arr[1:]).astype(int)
 
@@ -151,7 +154,8 @@ for read in tqdm.tqdm(bam):
 	if read.has_tag('MM'):
 
 		mod_idx_dict = getMatchedModBases(read)
-
+		if type(mod_idx_dict) == type(None):
+			continue
 		new_mm, new_ml = modifyMMAndMLTags(read, mod_idx_dict)
 		
 		if new_ml is not None:
