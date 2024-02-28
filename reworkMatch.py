@@ -56,25 +56,21 @@ def generateMMTag(mm_labels,mm_tags,ml_vals,read,tag_idxs):
 	output_MM = []
 	output_ML = []
 
-
 	for mm_single_tag_string in mm_string.split(';')[:-1]:
 		single_tag_list = mm_single_tag_string.split(',')
 		tag_label = single_tag_list[0]
+		
 		og_mm_tag_cumsum = np.cumsum(np.array(single_tag_list[1:]).astype(int) + 1 )
 
-
-		if 'C+h' in tag_label: # no hemi-methylation currently
+		if 'h' in tag_label: # no hemi-methylation currently
 			continue
 		
 		try:
 			idx = mm_labels.index(tag_label)
 		except:
 			continue
-
+		
 		new_label = mm_labels[idx]
-
-		# new_forward_pos = mm_tags[idx]
-
 		new_ml = ml_vals[idx]
 
 		mm_tag_idx = tag_idxs[idx]
@@ -84,13 +80,20 @@ def generateMMTag(mm_labels,mm_tags,ml_vals,read,tag_idxs):
 		if len(idxed_cumsum) == 0:
 			continue
 
+		new_mm = [str(idxed_cumsum[0] - 1)] + list((np.diff(idxed_cumsum)-1).astype(str))
 
-		new_mm = [str(idxed_cumsum[0])] + list((np.diff(idxed_cumsum) - 1).astype(str))
+		# if not read.is_reverse:
+		# 	new_mm = [str(idxed_cumsum[0] - 1)] + list((np.diff(idxed_cumsum)-1).astype(str))
+		# else:
+		# 	new_mm = [str(idxed_cumsum[0] - 1)] + list((np.diff(idxed_cumsum)-1).astype(str))
 
+
+		# if read.is_reverse and tag_label == "C+m":
+		# 	new_mm = [str(idxed_cumsum[0])] + list((np.diff(idxed_cumsum) - 1).astype(str))
 
 
 		tmp_mm_vals = ','.join(new_mm)
-		tmpMM = str(tag_label) + ',' + tmp_mm_vals + ';'
+		tmpMM = str(new_label) + ',' + tmp_mm_vals + ';'
 
 		# print(tmpMM, new_ml)
 		output_MM.append(tmpMM)
@@ -101,6 +104,7 @@ def generateMMTag(mm_labels,mm_tags,ml_vals,read,tag_idxs):
 
 	MM = ''.join(output_MM)
 	ML  = array('B', np.concatenate(output_ML))
+	# print(MM,ML)
 
 	return MM, ML
 
@@ -108,8 +112,61 @@ def generateMMTag(mm_labels,mm_tags,ml_vals,read,tag_idxs):
 
 
 
+# def readTest(read):
+
+
+
+# 	aligned_pairs = np.array(read.get_aligned_pairs(with_seq=True,matches_only=True))
+# 	# get the sequence to find mismatches, and we want non-matches (indels) as well 
+# 	aligned_pairs = aligned_pairs[aligned_pairs[:,0] != None ,:]
+# 	none_idx = aligned_pairs[:,2] == None 
+# 	# index of Nones (indel)
+# 	aligned_pairs[:,2][none_idx] = "n" 
+
+# 	# seq = np.array(list(read.get_forward_sequence()))
+# 	seq_len = len(read.get_forward_sequence())
+	
+# 	mod_bases = read.modified_bases
+# 	# seq = np.array(list(read.get_forward_sequence()))
+
+# 	reverse_state = read.is_reverse
+
+# 		# here we will store the modified MM tags + ML tags
+# 		# in the order they are processed and output
+# 		# in order to properly format the MM and ML tag
+
+# 	# print(mod_bases)
+
+# 	for m in mod_bases:
+			
+# 		if 'h' in m: # not supporting hemi-methylation currently
+# 			continue
+# 		if m[0] == "A" and m[2] == "a":
+# 			mod_stack = np.vstack(mod_bases[m]).T
+				
+# 			# if reverse_state:
+# 			# 	mod_stack[0]= np.abs(mod_stack[0] - seq_len) - 1
+
+# 			ap_idx_of_all_mods = np.isin(aligned_pairs[:,0], mod_stack[0])
+			
+# 			if  reverse_state:
+
+# 				print(aligned_pairs[:,2][ap_idx_of_all_mods])
+# 				# then we generate the forward idx, which we will use to parse the sequence
+# 			# to define the 
+		
+
+
+			
+
+
+
+
+
 def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 
+
+	# reverse parsing is wrong
 
 	parseA = False
 	parseCG = False
@@ -121,11 +178,15 @@ def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 		parseCG = True
 	if 'GC' in motifs:
 		parseGC = True
+	counter = 0
+	for read in tqdm.tqdm(bam):
+		counter += 1
+		if counter > 1000:
+			return
+		# if not read.is_reverse:
+		# 	continue
 
-	for read in tqdm.tqdm(bam.fetch()):
-
-
-		aligned_pairs = np.array(read.get_aligned_pairs(with_seq=True,matches_only=True))
+		aligned_pairs = np.array(read.get_aligned_pairs(with_seq=True,matches_only=False))
 		# get the sequence to find mismatches, and we want non-matches (indels) as well 
 		aligned_pairs = aligned_pairs[aligned_pairs[:,0] != None ,:]
 		none_idx = aligned_pairs[:,2] == None 
@@ -134,15 +195,17 @@ def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 
 		# seq = np.array(list(read.get_forward_sequence()))
 		seq_len = len(read.get_forward_sequence())
+
+
 		
 		mod_bases = read.modified_bases_forward
-		# seq = np.array(list(read.get_forward_sequence()))
+		# modified bases in the original forward coordinates
 
 		reverse_state = read.is_reverse
 
-		# here we will store the modified MM tags + ML tags
-		# in the order they are processed and output
-		# in order to properly format the MM and ML tag
+		if reverse_state:
+			aligned_pairs[:,0] = np.abs(aligned_pairs[:,0].astype(int) - seq_len) - 1
+
 		mm_labels = []
 		mm_tags = []
 		ml_vals = []
@@ -154,64 +217,92 @@ def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 				continue
 			
 			mod_stack = np.vstack(mod_bases[m]).T
-			
-			if reverse_state:
-				mod_stack[0]= np.abs(mod_stack[0] - seq_len) - 1
 
 			ap_idx_of_all_mods = np.isin(aligned_pairs[:,0], mod_stack[0])
 
+			# handling reverse strand is incorrect
 
-			# then we generate the forward idx, which we will use to parse the sequence
-			# to define the 
-			
 			if m[0] == "A" and parseA:
 				base = "A"
+				
 				if reverse_state:
 					
 					base = "T"
 				
 				forward_idx = aligned_pairs[:,0][ap_idx_of_all_mods][aligned_pairs[:,2][ap_idx_of_all_mods] == base].astype(int)
 
-				if reverse_state:
-					forward_idx = np.abs(seq_len - (forward_idx+ 1)) 
-
 			
 				new_label = 'A+a'
+				
+				tag_idx = np.isin(mod_stack[0],forward_idx) 
+
+				new_ml_tags = mod_stack[1][tag_idx]
+
+				mm_labels.append(new_label)
+				mm_tags.append(forward_idx)
+				ml_vals.append(new_ml_tags)
+				tag_idxs.append(tag_idx)
 
 
-			if m[0] == "C":
+			if m[0] == "C" and m[2]=="m":
 				
 				if parseCG or parseGC:
 
 					base = "C"
 					neighbor_base = "G"
 					
-					if reverse_state:
+					if read.is_reverse:
 					
 						base = "G"
 						neighbor_base = "C"
 					
-					base_match_idx = aligned_pairs[:,2][ap_idx_of_all_mods] == base
+
+
+					base_match_idx = aligned_pairs[:,2][ap_idx_of_all_mods].T == base
+					# all instances of where bases match at the position
+
+					aligned_pairs_scalar_index = np.argwhere(ap_idx_of_all_mods).T[0][base_match_idx].astype(int)
+
+					if len(aligned_pairs_scalar_index) == 0:
+						continue
+
+					if aligned_pairs_scalar_index[0] == 0:
+						aligned_pairs_scalar_index = aligned_pairs_scalar_index[1:]
+					
+					if aligned_pairs_scalar_index[-1] >= len(aligned_pairs[:,0]) - 1:
+						aligned_pairs_scalar_index = aligned_pairs_scalar_index[:-1]
 					# need to clip 1 base of the edge of base_match_idx before combining					
+					
 					if parseCG :
-						
-						ap_idx_of_all_mods_plus_one = (np.argwhere(ap_idx_of_all_mods).T[0] + 1)[1:-1]
-						
+						if not reverse_state:
+							ap_idx_of_all_mods_plus_one = aligned_pairs_scalar_index + 1
+						else:
+							ap_idx_of_all_mods_plus_one = aligned_pairs_scalar_index - 1
+						# find all True positions, add 1 and clip in case mod is at end/beginning
+
 						neighbor_idx = aligned_pairs[:,2][ap_idx_of_all_mods_plus_one] == neighbor_base
+						# check that the neigbor is correct
 
-						CG_idx = (base_match_idx[1:-1]) & (neighbor_idx)
+						# now we have 2 arrays of True and False, we can do Logical And to see where they are both True
+						# CG_idx = (base_match_idx[1:-1]) & (neighbor_idx)
+						
+						ap_CG_idx = aligned_pairs_scalar_index[neighbor_idx]
 
-						ap_CG_idx = ap_idx_of_all_mods_plus_one[CG_idx] - 1 
+
+
 
 					if parseGC : 
-					
-						ap_idx_of_all_mods_minus_one = (np.argwhere(ap_idx_of_all_mods).T[0] - 1)[1:-1]
+						if not reverse_state:
+							ap_idx_of_all_mods_minus_one = aligned_pairs_scalar_index - 1
+						else:
+							ap_idx_of_all_mods_minus_one = aligned_pairs_scalar_index + 1
 						
 						neighbor_idx = aligned_pairs[:,2][ap_idx_of_all_mods_minus_one] == neighbor_base
 
-						GC_idx = (base_match_idx[1:-1]) & (neighbor_idx)
+						# GC_idx = (base_match_idx[1:-1]) & (neighbor_idx)
 
-						ap_GC_idx = ap_idx_of_all_mods_minus_one[GC_idx] + 1 
+						ap_GC_idx = aligned_pairs_scalar_index[neighbor_idx]
+						
 
 
 					if parseCG and parseGC:
@@ -226,24 +317,23 @@ def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 						return None
 
 					forward_idx = forward_idx.astype(int)
-					if reverse_state:
-						forward_idx = np.abs(seq_len - (forward_idx+ 1)) 
-					
+					# forward idx is in the correct orientation
+
 					new_label = 'C+m'
 
-			forward_idx.sort()
+					tag_idx = np.isin(mod_stack[0],forward_idx) 
+					
+					
+					# up until this point, reverse C encoding looks correct. So that means it is in the MM tag portion
+					# everything looks correct, except for Cytosine MM tag, but only on the reverse orientation
+
+					new_ml_tags = mod_stack[1][tag_idx]
+
+					mm_labels.append(new_label)
+					mm_tags.append(forward_idx)
+					ml_vals.append(new_ml_tags)
+					tag_idxs.append(tag_idx)
 			
-			# forward idx is the index of the base in the forward sequence
-			# of the read ( original read as it comes of sequencer )
-
-			tag_idx = np.isin(mod_stack[0],forward_idx) 
-			new_ml_tags = mod_stack[1][tag_idx]
-
-			mm_labels.append(new_label)
-			mm_tags.append(forward_idx)
-			ml_vals.append(new_ml_tags)
-			tag_idxs.append(tag_idx)
-		
 		MM, ML = generateMMTag(mm_labels,mm_tags,ml_vals,read,tag_idxs)
 
 		if MM == None or ML == None:
@@ -257,25 +347,8 @@ def parseBam(bam, motifs, base_pos_in_motif, output_bam):
 
 			read.set_tag('MM', MM, "Z")
 
-		# generateMMTag(mm_labels,mm_tags,ml_vals,read,seq)
-			#### 
-			# forward index will no give us correct position for every base we want to keep in the MM tag
-			# we now can use to filter MM tag and grab the correct ML tags 
-			# it is in the forward coordinate space 
-			# so it is always encoded as "+" in the MM spec 
-
-			output_bam.write(read)
-
-
-
-
-
-
-				
-
-
-
-
+			# readTest(read)
+		output_bam.write(read)
 
 
 
