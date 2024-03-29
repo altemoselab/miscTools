@@ -260,7 +260,7 @@ def parseBam(bam, motifs, output_bam):
 						return None
 
 
-				if parse CC:
+				if parseCC:
 					base = "C"
 					neighbor_base = "C"
 					
@@ -292,11 +292,12 @@ def parseBam(bam, motifs, output_bam):
 					
 					ap_CC_idx = aligned_pairs_scalar_index[neighbor_idx]
 
-					if len(forward_idx) == 0:
-						forward_idx = aligned_pairs[:,0][ap_CC_idx]
-					else:
+					#if :
+					#	forward_idx = aligned_pairs[:,0][ap_CC_idx]
+					try:
 						forward_idx = aligned_pairs[:,0][np.unique(np.concatenate([forward_idx,ap_CC_idx]))]
-
+					except:
+						forward_idx = aligned_pairs[:,0][ap_CC_idx]
 				forward_idx = np.unique(forward_idx.astype(int))
 				forward_idx.sort()
 				# forward idx is in the correct orientation
