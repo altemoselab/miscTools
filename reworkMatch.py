@@ -199,7 +199,7 @@ def parseBam(bam, motifs, output_bam):
 
 
 			if m[0] == "C" and m[2]=="m":
-				
+				all_c_idx = []
 				if parseCG or parseGC:
 
 					base = "C"
@@ -265,7 +265,7 @@ def parseBam(bam, motifs, output_bam):
 					else:
 						print('Modification not supported')
 						return None
-
+					all_c_idx.append(forward_idx)
 
 				if parseCC:
 					base = "C"
@@ -303,27 +303,29 @@ def parseBam(bam, motifs, output_bam):
 
 					#if :
 					#	forward_idx = aligned_pairs[:,0][ap_CC_idx]
-					try:
-						forward_idx = aligned_pairs[:,0][np.unique(np.concatenate([forward_idx,ap_CC_idx]))]
-					except:
-						print('here')
-						forward_idx = np.unique(aligned_pairs[:,0][ap_CC_idx])
+					# try:
+					# 	forward_idx = aligned_pairs[:,0][np.unique(np.concatenate([forward_idx,ap_CC_idx]))]
+					# except:
+					# 	print('here')
+					forward_idx = np.unique(aligned_pairs[:,0][ap_CC_idx])
+					all_c_idx.append(forward_idx)
 
-				forward_idx = np.unique(forward_idx.astype(int))
-				forward_idx.sort()
+				new_forward_idx = np.concatenate(all_c_idx)
+				new_forward_idx = np.unique(new_forward_idx.astype(int))
+				new_forward_idx.sort()
 
 				# forward idx is in the correct orientation
 
 				new_label = 'C+m'
 
-				tag_idx = np.isin(mod_stack[:,0].astype(int),forward_idx,assume_unique=True,kind='table')
+				tag_idx = np.isin(mod_stack[:,0].astype(int),new_forward_idx,assume_unique=True,kind='table')
 				print('stack', mod_stack[:,0][tag_idx])
 				
 				#print(tag_idx)				
 				new_ml_tags = mod_stack[:,1][tag_idx]
 				
 			#	print(np.diff(np.cumsum(forward_idx)))
-				new_mm = generateMMVals(read, forward_idx,"C")
+				new_mm = generateMMVals(read, new_forward_idx,"C")
 				
 				if type(new_mm) != type(None):
 
