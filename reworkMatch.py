@@ -58,6 +58,13 @@ def generateMMVals(read,forward_idx, base):
 	binary[seq==base] = 1
 	
 	cumsum_forward = np.cumsum(binary)[forward_idx]	
+	t = np.diff(cumsum_forward)
+#	if np.sum(t==0) > 0:
+#		print(cumsum_forward)
+#		print(forward_idx)
+#		print(binary[forward_idx])
+#		print(read.is_reverse)
+#		print('--')
 	try:
 		new_mm = list([(cumsum_forward[0] - 1).astype(str)]) + list((np.diff(cumsum_forward) - 1).astype(str))
 
@@ -292,24 +299,30 @@ def parseBam(bam, motifs, output_bam):
 					
 					ap_CC_idx = aligned_pairs_scalar_index[neighbor_idx]
 
+					#print(aligned_pairs[:,2][ap_CC_idx+1])
+
 					#if :
 					#	forward_idx = aligned_pairs[:,0][ap_CC_idx]
 					try:
 						forward_idx = aligned_pairs[:,0][np.unique(np.concatenate([forward_idx,ap_CC_idx]))]
 					except:
-						forward_idx = aligned_pairs[:,0][ap_CC_idx]
+						print('here')
+						forward_idx = np.unique(aligned_pairs[:,0][ap_CC_idx])
+
 				forward_idx = np.unique(forward_idx.astype(int))
 				forward_idx.sort()
+
 				# forward idx is in the correct orientation
 
 				new_label = 'C+m'
 
 				tag_idx = np.isin(mod_stack[:,0].astype(int),forward_idx,assume_unique=True,kind='table')
+				print('stack', mod_stack[:,0][tag_idx])
 				
-				
+				#print(tag_idx)				
 				new_ml_tags = mod_stack[:,1][tag_idx]
 				
-
+			#	print(np.diff(np.cumsum(forward_idx)))
 				new_mm = generateMMVals(read, forward_idx,"C")
 				
 				if type(new_mm) != type(None):
