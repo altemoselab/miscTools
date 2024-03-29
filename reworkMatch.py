@@ -26,7 +26,7 @@ def inputArgs():
 	
 	parser.add_argument('-m','--motif',
 		type=str,
-		help = 'motif to parse, current options A,(C)G,G(C). \n Provide multiple contexts as comma seperated list, example: A,CG,GC')
+		help = 'motif to parse, current options A,(C)G,G(C),(C)C \n Provide multiple contexts as comma seperated list, example: A,CG,GC,CC')
 
 	args = parser.parse_args()
 
@@ -100,6 +100,8 @@ def parseBam(bam, motifs, output_bam):
 	parseA = False
 	parseCG = False
 	parseGC = False
+	parseCC = False
+
 
 	if 'A' in motifs:
 		parseA = True
@@ -107,6 +109,8 @@ def parseBam(bam, motifs, output_bam):
 		parseCG = True
 	if 'GC' in motifs:
 		parseGC = True
+	if 'CC' in motifs:
+		parseCC = True
 
 
 
@@ -255,26 +259,64 @@ def parseBam(bam, motifs, output_bam):
 						print('Modification not supported')
 						return None
 
-					forward_idx = np.unique(forward_idx.astype(int))
-					forward_idx.sort()
-					# forward idx is in the correct orientation
 
-					new_label = 'C+m'
-
-					tag_idx = np.isin(mod_stack[:,0].astype(int),forward_idx,assume_unique=True,kind='table')
+				if parse CC:
+					base = "C"
+					neighbor_base = "C"
 					
+					if read.is_reverse:
 					
-					new_ml_tags = mod_stack[:,1][tag_idx]
+						base = "G"
+						neighbor_base = "G"
+
+					base_match_idx = aligned_pairs[:,2][ap_idx_of_all_mods].T == base
+					aligned_pairs_scalar_index = np.argwhere(ap_idx_of_all_mods).T[0][base_match_idx].astype(int)
+
+					if len(aligned_pairs_scalar_index) < 1:
+						continue
+
+					if aligned_pairs_scalar_index[0] == 0:
+						aligned_pairs_scalar_index = aligned_pairs_scalar_index[1:]
+					
+					try:
+						if aligned_pairs_scalar_index[-1] >= len(aligned_pairs[:,0]) - 1:
+							aligned_pairs_scalar_index = aligned_pairs_scalar_index[:-1]
+					except:
+						continue
+					# need to clip 1 base of the edge of base_match_idx before combining					
 					
 
-					new_mm = generateMMVals(read, forward_idx,"C")
+					ap_idx_of_all_mods_plus_one = aligned_pairs_scalar_index + 1
+					neighbor_idx = aligned_pairs[:,2][ap_idx_of_all_mods_plus_one] == neighbor_base
+
 					
-					if type(new_mm) != type(None):
+					ap_CC_idx = aligned_pairs_scalar_index[neighbor_idx]
 
-						output_MM, output_ML = createTag(new_mm,new_ml_tags,'C+m') 
+					if len(forward_idx) == 0:
+						forward_idx = aligned_pairs[:,0][ap_CC_idx]
+					else:
+						forward_idx = aligned_pairs[:,0][np.unique(np.concatenate([forward_idx,ap_CC_idx]))]
 
-						all_new_mm.append(output_MM)
-						all_new_ml.append(output_ML)
+				forward_idx = np.unique(forward_idx.astype(int))
+				forward_idx.sort()
+				# forward idx is in the correct orientation
+
+				new_label = 'C+m'
+
+				tag_idx = np.isin(mod_stack[:,0].astype(int),forward_idx,assume_unique=True,kind='table')
+				
+				
+				new_ml_tags = mod_stack[:,1][tag_idx]
+				
+
+				new_mm = generateMMVals(read, forward_idx,"C")
+				
+				if type(new_mm) != type(None):
+
+					output_MM, output_ML = createTag(new_mm,new_ml_tags,'C+m') 
+
+					all_new_mm.append(output_MM)
+					all_new_ml.append(output_ML)
 
 		writeRead(output_bam,read,all_new_mm,all_new_ml)
 
