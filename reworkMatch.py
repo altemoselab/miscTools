@@ -59,12 +59,12 @@ def generateMMVals(read,forward_idx, base):
 	
 	cumsum_forward = np.cumsum(binary)[forward_idx]	
 	t = np.diff(cumsum_forward)
-#	if np.sum(t==0) > 0:
-#		print(cumsum_forward)
-#		print(forward_idx)
-#		print(binary[forward_idx])
-#		print(read.is_reverse)
-#		print('--')
+	if np.sum(t==0) > 0:
+		print(cumsum_forward)
+		print(forward_idx)
+		print(binary[forward_idx])
+		print(read.is_reverse)
+		print('--')
 	try:
 		new_mm = list([(cumsum_forward[0] - 1).astype(str)]) + list((np.diff(cumsum_forward) - 1).astype(str))
 
@@ -319,7 +319,7 @@ def parseBam(bam, motifs, output_bam):
 				new_label = 'C+m'
 
 				tag_idx = np.isin(mod_stack[:,0].astype(int),new_forward_idx,assume_unique=True,kind='table')
-				print('stack', mod_stack[:,0][tag_idx])
+#				print('stack', mod_stack[:,0][tag_idx])
 				
 				#print(tag_idx)				
 				new_ml_tags = mod_stack[:,1][tag_idx]
