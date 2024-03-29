@@ -214,14 +214,17 @@ def parseBam(bam, motifs, output_bam):
 
 					aligned_pairs_scalar_index = np.argwhere(ap_idx_of_all_mods).T[0][base_match_idx].astype(int)
 
-					if len(aligned_pairs_scalar_index) == 0:
+					if len(aligned_pairs_scalar_index) < 1:
 						continue
 
 					if aligned_pairs_scalar_index[0] == 0:
 						aligned_pairs_scalar_index = aligned_pairs_scalar_index[1:]
 					
-					if aligned_pairs_scalar_index[-1] >= len(aligned_pairs[:,0]) - 1:
-						aligned_pairs_scalar_index = aligned_pairs_scalar_index[:-1]
+					try:
+						if aligned_pairs_scalar_index[-1] >= len(aligned_pairs[:,0]) - 1:
+							aligned_pairs_scalar_index = aligned_pairs_scalar_index[:-1]
+					except:
+						continue
 					# need to clip 1 base of the edge of base_match_idx before combining					
 					
 					if parseCG :
